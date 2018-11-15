@@ -27,8 +27,8 @@ GLuint shaderProgram;
 
 // The vertexArrayObject here will hold the pointers to 
 // the vertex data (in positionBuffer) and color data per vertex (in colorBuffer)
-GLuint		positionBuffer, colorBuffer, indexBuffer, vertexArrayObject;						
-
+GLuint		positionBuffer, positionBuffer2, colorBuffer, colorBuffer2, indexBuffer, indexBuffer2, vertexArrayObject, vertexArrayObject2;
+GLuint texture, texture2;
 
 
 void initGL()
@@ -41,12 +41,12 @@ void initGL()
 
 	///////////////////////////////////////////////////////////////////////////
 	// Create the positions buffer object
-	///////////////////////////////////////////////////////////////////////////	
+	///////////////////////////////////////////////////////////////////////////	  
 	const float positions[] = {
 		// X Y Z
 		-10.0f, -10.0f, -30.0f,    // v0
 		-10.0f, -10.0f, -330.0f,   // v1
-		10.0f, -10.0f, -330.0f,   // v2
+		10.0f, -10.0f, 330.0f,   // v2
 		10.0f, -10.0f, -30.0f     // v3
 	};
 	glGenBuffers(1, &positionBuffer);													// Create a handle for the vertex position buffer
@@ -76,7 +76,23 @@ void initGL()
 	//				 Create the texture coordinates' buffer object.
 	//				 Set up the attrib pointer.
 	//				 Enable the vertex attrib array.
+	//				edited as by task 3
 	///////////////////////////////////////////////////////////////////////////
+
+	float texcoords[] = {
+	0.0f, 0.0f, // (u,v) for v0 
+	0.0f, 15.0f, // (u,v) for v1
+	1.0f, 15.0f, // (u,v) for v2
+	1.0f, 0.0f // (u,v) for v3
+	};
+	GLuint texcoordsBuffer;
+	glGenBuffers(1, &texcoordsBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, texcoordsBuffer);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(texcoords), texcoords, GL_STATIC_DRAW);
+	glVertexAttribPointer(2, 2, GL_FLOAT, false/*normalized*/, 0/*stride*/, 0/*offset*/);
+	glEnableVertexAttribArray(2);
+
+
 
 	///////////////////////////////////////////////////////////////////////////
 	// Create the element array buffer object
@@ -100,6 +116,109 @@ void initGL()
 	//			Load Texture
 	//************************************
 	// >>> @task 2
+
+	int w, h, comp;
+	unsigned char* image = stbi_load("../lab2-textures/asphalt.jpg", &w, &h, &comp, STBI_rgb_alpha);
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+	free(image);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glGenerateMipmap(GL_TEXTURE_2D);
+	// Sets the type of filtering to be used on magnifying and
+	// minifying the active texture. These are the nicest available options.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	//this enables the nicest level of anisotropic filtering. 
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 16.0f);
+
+	//Indicates that the active texture should be repeated,
+	//instead of for instance clamped, for texture coordinates > 1 or <-1.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	
+	// > TASK 6
+	//here comes the explodi boi
+
+	///////////////////////////////////////////////////////////////////////////
+	// Create the vertex array object
+	///////////////////////////////////////////////////////////////////////////
+
+	glGenVertexArrays(1, &vertexArrayObject2);
+	glBindVertexArray(vertexArrayObject2);
+
+	
+	const float positions2[] = {
+		// X Y Z
+		-4.0f, -4.0f, -30.0f,
+		-4.0f, 4.0f, -30.0f,
+		4.0f, 4.0f, -30.0f,   //
+		4.0f, -4.0f, -30.0f     // v3
+	};
+	glGenBuffers(1, &positionBuffer2);													// yada yada, here comes the explosion code for the buffer, then setting it, and lastly vertex position
+	glBindBuffer(GL_ARRAY_BUFFER, positionBuffer2);					
+	glBufferData(GL_ARRAY_BUFFER, sizeof(positions2), positions2, GL_STATIC_DRAW);		
+	glVertexAttribPointer(0, 3, GL_FLOAT, false/*normalized*/, 0/*stride*/, 0/*offset*/);
+	glEnableVertexAttribArray(0);
+
+	const float colors2[] = {
+		//  R     G		B
+		1.0f, 1.0f, 1.0f,		// White
+		0.5f, 0.5f, 0.8f,		// Lightblue
+		0.5f, 0.5f, 0.8f,		// Lightblue
+		1.0f, 1.0f, 1.0f		// White
+	};
+	glGenBuffers(1, &colorBuffer2);														//CTRL+C.... CTRL+V
+	glBindBuffer(GL_ARRAY_BUFFER, colorBuffer2);										
+	glBufferData(GL_ARRAY_BUFFER, sizeof(colors2), colors2, GL_STATIC_DRAW);			
+	glVertexAttribPointer(1, 3, GL_FLOAT, false/*normalized*/, 0/*stride*/, 0/*offset*/);
+	glEnableVertexAttribArray(1);
+
+	float texcoords2[] = {
+		1.0f, 1.0f,	// (u,v) for v0
+		1.0f, 0.0f,	// (u,v) for v1
+		0.0f, 0.0f,	// (u,v) for v2
+		0.0f, 1.0f	// (u,v) for v3
+	};
+	GLuint texcoordBuffer2;
+	glGenBuffers(1, &texcoordBuffer2);
+	glBindBuffer(GL_ARRAY_BUFFER, texcoordBuffer2);										//CTRL+C.... CTRL+V
+	glBufferData(GL_ARRAY_BUFFER, sizeof(texcoords2), texcoords2, GL_STATIC_DRAW);
+	glVertexAttribPointer(2, 2, GL_FLOAT, false/*normalized*/, 0/*stride*/, 0/*offset*/);
+	glEnableVertexAttribArray(2);
+
+		const int indices2[] = {
+		0, 1, 3, // Triangle 1
+		1, 2, 3  // Triangle 2
+		};
+	glGenBuffers(1, &indexBuffer2);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer2);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices2), indices2, GL_STATIC_DRAW);
+
+	// Setting texture
+	unsigned char* explosion = stbi_load("../lab2-textures/explosion.png", &w, &h, &comp, STBI_rgb_alpha);
+	glGenTextures(1, &texture2);
+	glBindTexture(GL_TEXTURE_2D, texture2);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, explosion);
+	free(explosion);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glGenerateMipmap(GL_TEXTURE_2D);
+	// Sets the type of filtering to be used on magnifying and
+	// minifying the active texture. These are the nicest available options.
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	//this enables the nicest level of anisotropic filtering. 
+	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 16.0f);
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 }
 
 void display(void)
@@ -133,9 +252,19 @@ void display(void)
 	// >>> @task 3.1
 
 	glBindVertexArray(vertexArrayObject);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, texture);
+
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
 
+	glBindVertexArray(vertexArrayObject2);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, texture2);
+
+
+	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 	glUseProgram( 0 ); // "unsets" the current shader program. Not really necessary.
 }
 
@@ -182,7 +311,7 @@ int main(int argc, char *argv[])
 		display();
 
                 // Render overlay GUI.
-                //gui();
+                gui();
 
 		// Swap front and back buffer. This frame will now been displayed.
 		SDL_GL_SwapWindow(g_window);			

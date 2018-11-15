@@ -41,8 +41,10 @@ GLuint shaderProgram;
 float currentTime = 0.0f;
 
 // Models
-Model *cityModel = nullptr, *carModel = nullptr;
+Model *cityModel = nullptr, *carModel = nullptr, *carModel2 = nullptr;
 mat4 carModelMatrix(1.0f);
+mat4 carModel2Matrix(1.0f);
+mat4 rotateCarModelMatrix(1.0f);
 
 vec3 worldUp = vec3(0.0f, 1.0f, 0.0f);
 
@@ -57,6 +59,7 @@ void loadModels()
 	///////////////////////////////////////////////////////////////////////////
 	cityModel = loadModelFromOBJ("../scenes/city.obj");
 	carModel = loadModelFromOBJ("../scenes/car.obj");
+	carModel2 = loadModelFromOBJ("../scenes/car2.obj");
 }
 
 void display(void)
@@ -84,7 +87,13 @@ void display(void)
 	glUseProgram( shaderProgram );				
 
 	// Set up model matrices
+
+	//CTRL+C CTRL+V
 	mat4 cityModelMatrix(1.0f);
+	vec3 cameraRight = normalize(cross(cameraDirection, worldUp));
+	vec3 cameraUp = normalize(cross(cameraRight, cameraDirection));
+
+	mat3 cameraBaseVector(cameraRight, cameraUp, -cameraDirection);
 
 	// Set up the view matrix
 	// The view matrix defines where the viewer is looking
@@ -93,7 +102,8 @@ void display(void)
 		0.000000000f, 0.816496551f, 1.00000000f, 0.000000000f,
 		-0.707106769f, -0.408248276f, 1.00000000f, 0.000000000f,
 		0.000000000f, 0.000000000f, -30.0000000f, 1.00000000f);
-	mat4 viewMatrix = constantViewMatrix;
+	mat4 cameraRotate = mat4(transpose(cameraBaseVector));
+	mat4 viewMatrix = cameraRotate * translate(-cameraPosition);
 
 	// Setup the projection matrix
         if (w != old_w || h != old_h)
@@ -103,7 +113,8 @@ void display(void)
             old_w = w;
             old_h = h;
         }
-	mat4 projectionMatrix = perspective(radians(pp.fov), float(pp.w) / float(pp.h), pp.near, pp.far);
+	mat4 projectionMatrix = perspective(radians(pp.fov*currentTime), float(pp.w) / float(pp.h), pp.near, pp.far); //enable acid trip mode
+	//mat4 projectionMatrix = perspective(radians(pp.fov), float(pp.w) / float(pp.h), pp.near, pp.far);
 	
 	// Concatenate the three matrices and pass the final transform to the vertex shader
 	
@@ -114,9 +125,15 @@ void display(void)
 	render(cityModel);
 
 	// car
-	modelViewProjectionMatrix = projectionMatrix * viewMatrix * carModelMatrix;
+	modelViewProjectionMatrix = projectionMatrix * viewMatrix * carModel2Matrix;
+	glUniformMatrix4fv(loc, 1, false, &modelViewProjectionMatrix[0].x);
+	render(carModel2);
+
+	//car2
+	modelViewProjectionMatrix = projectionMatrix * viewMatrix * rotateCarModelMatrix;
 	glUniformMatrix4fv(loc, 1, false, &modelViewProjectionMatrix[0].x);
 	render(carModel);
+	
 
 
 	glUseProgram( 0 );	
@@ -129,8 +146,8 @@ void gui() {
         // ----------------- Set variables --------------------------
         ImGui::SliderFloat("Field Of View", &pp.fov, 1.0f, 180.0f, "%.0f");
         ImGui::SliderInt("Width", &pp.w, 256, 1920);
-        ImGui::SliderInt("Height", &pp.h, 256, 1080);
-        ImGui::Text("Aspect Ratio: %.2f", float(pp.w) / float(pp.h));
+		ImGui::SliderInt("Height", &pp.h, 256, 1080);
+		ImGui::Text("Aspect Ratio: %.2f", float(pp.w) / float(pp.h));
         ImGui::SliderFloat("Near Plane", &pp.near, 0.1f, 300.0f, "%.1f");
         ImGui::SliderFloat("Far Plane", &pp.far, 0.1f, 300.0f, "%.1f");
         if (ImGui::Button("Reset"))
@@ -161,18 +178,19 @@ int main(int argc, char *argv[])
 
 	// render-loop
 	bool stopRendering = false;
-	auto startTime = std::chrono::system_clock::now();
+	auto startTime = std::chrono::system_clock::now();	
 
 	while (!stopRendering) {
 		//update currentTime
 		std::chrono::duration<float> timeSinceStart = std::chrono::system_clock::now() - startTime;
 		currentTime = timeSinceStart.count();
+		
 
 		// render to window
 		display();
 
                 // Render overlay GUI.
-                //gui();
+               // gui();
 
 		// Swap front and back buffer. This frame will now been displayed.
 		SDL_GL_SwapWindow(g_window);
@@ -194,30 +212,61 @@ int main(int argc, char *argv[])
 				static int prev_ycoord = event.motion.y;
 				int delta_x = event.motion.x - prev_xcoord;
 				int delta_y = event.motion.y - prev_ycoord;
+
 				if (event.button.button & SDL_BUTTON(SDL_BUTTON_LEFT)) {
-					printf("Mouse motion while left button down (%i, %i)\n", event.motion.x, event.motion.y);
+					float rotationSpeed = 0.005f;
+					mat4 yaw = rotate(rotationSpeed * -delta_x, worldUp);
+					mat4 pitch = rotate(rotationSpeed * -delta_y, normalize(cross(cameraDirection, worldUp)));
+					cameraDirection = vec3(pitch * yaw * vec4(cameraDirection, 0.0f));
+
+
 				}
-				prev_xcoord = event.motion.x;
-				prev_ycoord = event.motion.y;
 			}
 		}
 
 		// check keyboard state (which keys are still pressed)
 		const uint8_t *state = SDL_GetKeyboardState(nullptr);
 
-		// implement camera controls based on key states
+		// implement controls based on key states
+		float speed = 0.3f;
+		static mat4 T(1.0f), R(1.0f);
 		if (state[SDL_SCANCODE_UP]) {
-			printf("Key Up is pressed down\n");
+			T[3] += speed * vec4(0.0f, 0.0f, 1.0f, 0.0f);
 		}
 		if (state[SDL_SCANCODE_DOWN]) {
-			printf("Key Down is pressed down\n");
+			T[3] -= speed * vec4(0.0f, 0.0f, 1.0f, 0.0f);
 		}
 		if (state[SDL_SCANCODE_LEFT]) {
-			printf("Key Left is pressed down\n");
+			R[0] -= 0.03f * R[2];
 		}
 		if (state[SDL_SCANCODE_RIGHT]) {
-			printf("Key Right is pressed down\n");
+			R[0] += 0.03f * R[2];
 		}
+		if (state[SDL_SCANCODE_W]) {
+			cameraPosition -= 0.03f * cameraDirection;
+		}
+		if (state[SDL_SCANCODE_S]) {
+			cameraPosition	 += 0.03f * cameraDirection;
+		}
+
+		R[0] = normalize(R[0]);
+		R[2] = vec4(cross(vec3(R[0]), vec3(R[1])), 0.0f);
+		//carModelMatrix = R;	rotation only
+
+
+		//carModelMatrix = T;	transplate only
+
+		carModel2Matrix = R * T;
+		//carModelMatrix = T * R;	translate, then rotate equals in non-intended behavour
+
+		//calculations fo rthe spinnyboii car
+		mat4 R2 = rotate((float)(M_PI * currentTime), vec3(0.0f, 1.0f, 0.0f));
+		mat4 T2 = translate(vec3(1.2*currentTime,0.0,1.05*currentTime));	//increases spin by the second
+		//R2[0] = normalize(R2[0]);
+		//R2[2] = vec4(cross(vec3(R2[0]), vec3(R2[1])),  0.0f);
+
+			
+		rotateCarModelMatrix = R2 * T2;
 	}
 
 	// Shut down everything. This includes the window and all other subsystems.

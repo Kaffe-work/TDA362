@@ -12,6 +12,6 @@ uniform mat4 modelViewProjectionMatrix;
 void main() 
 {
 	gl_Position = modelViewProjectionMatrix * vec4(position, 1.0);
-	outColor = vec4(color, 1.0); 
+	outColor = vec4(color, 0.50); 
 	texCoord = texCoordIn;
 }
