@@ -47,6 +47,10 @@ vec3 grayscale(vec3 rgbSample);
  */
 vec3 toSepiaTone(vec3 rgbSample);
 
+vec3 mosaic(vec2 coord);
+
+//vec3 bloom(vec2 coord);
+
 
 
 void main()
@@ -71,9 +75,12 @@ void main()
 	case 5:
 		// all at once
 		fragmentColor = vec4(toSepiaTone(blur(mushrooms(gl_FragCoord.xy))), 1.0);
-		break;
+		break; 
 	case 6:
-		fragmentColor = vec4(0.0); // place holder
+			fragmentColor = vec4(mosaic(gl_FragCoord.xy), 1.0);  
+	//	fragmentColor = textureRect (frameBufferTexture, mosiac (gl_FragCoord.xy));
+	//	fragmentColor = textureRect ( frameBufferTexture, mosiac ( gl_FragCoord.xy ) );
+		//fragmentColor = vec4(mosiac(textureRect(frameBufferTexture, gl_FragCoord.xy).xyz,gl_FragCoord.xy), 1.0); // place holder
 		break;
 	case 7:
 		fragmentColor = vec4(0.0); // place holder
@@ -108,7 +115,7 @@ vec3 toSepiaTone(vec3 rgbSample)
 
 vec2 mushrooms(vec2 inCoord)
 {
-	return inCoord + vec2(sin(time * 4.3127 + inCoord.y / 9.0) * 15.0, 0.0);
+	return inCoord + vec2(sin(time * 4.3127 + inCoord.y / 9.0) * 15.0, sin(time * 6.3127 + inCoord.y / 9.0)*5);
 }
 
 vec3 blur(vec2 coord)
@@ -129,3 +136,20 @@ vec3 grayscale(vec3 rgbSample)
 {
 	return vec3(rgbSample.r * 0.2126 + rgbSample.g * 0.7152 + rgbSample.b * 0.0722);
 }
+
+
+vec3 mosaic(vec2 coord)
+{
+	return textureRect(frameBufferTexture, vec2(coord.x - mod(coord.x,16), coord.y - mod(coord.y, 16))).xyz;
+}
+
+
+
+//vec3 mosiac(vec3 rgbSample, vec2 coord)
+//{
+//	float pixels = 256.0;
+//	float dx = 15.0 * (1.0/pixels);
+//	float dy = 15.0 * (1.0/pixels);
+//	vec2 newCoord = vec2(floor(dx * coord.x)/dx, floor(dy * coord.y)/dy);
+//	return textureRect(frameBufferTexture, newCoord).rgb;
+//}

@@ -125,6 +125,17 @@ struct FboInfo {
 		// Generate and bind framebuffer
 		///////////////////////////////////////////////////////////////////////
 		// >>> @task 1
+
+		glGenFramebuffers(1, &framebufferId);
+		glBindFramebuffer(GL_FRAMEBUFFER, framebufferId);
+		//bind texture as colour attachment
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTextureTarget, 0);
+		glDrawBuffer(GL_COLOR_ATTACHMENT0);
+		//bind the texture as depth attchment 
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthBuffer, 0);
+		 
+
+
 		// check if framebuffer is complete
 		isComplete = checkFramebufferComplete();
 
@@ -184,14 +195,16 @@ void initGL()
 	// load and set up default shader
 	backgroundProgram = labhelper::loadShaderProgram("../lab5-rendertotexture/shaders/background.vert", "../lab5-rendertotexture/shaders/background.frag");
 	shaderProgram     = labhelper::loadShaderProgram("../lab5-rendertotexture/shaders/simple.vert",     "../lab5-rendertotexture/shaders/simple.frag");
-	postFxShader      = labhelper::loadShaderProgram("../lab5-rendertotexture/shaders/postFx.vert",     "../lab5-rendertotexture/shaders/postFx.frag");
+	postFxShader = labhelper::loadShaderProgram("../lab5-rendertotexture/shaders/postFx.vert", "../lab5-rendertotexture/shaders/postFx.frag");
+//shaderProgram	  = labhelper::loadShaderProgram("../lab5-rendertotexture/shaders/simple.vert", "../lab5-rendertotexture/shaders/cutoff.frag");
+	//cutOffFBO      = labhelper::loadShaderProgram("../lab5-rendertotexture/shaders/postFx.vert",     "../lab5-rendertotexture/shaders/cutoff.frag");
 
 	///////////////////////////////////////////////////////////////////////////
 	// Load environment map
 	///////////////////////////////////////////////////////////////////////////
 	const int roughnesses = 8;
 	std::vector<std::string> filenames;
-	for (int i = 0; i < roughnesses; i++)
+	for (int i = 0; i < roughnesses; i++) 
 		filenames.push_back("../scenes/envmaps/" + envmap_base_name + "_dl_" + std::to_string(i) + ".hdr");
 
 	reflectionMap = labhelper::loadHdrMipmapTexture(filenames);
@@ -203,6 +216,9 @@ void initGL()
 	///////////////////////////////////////////////////////////////////////////
 	int w, h;
 	SDL_GetWindowSize(g_window, &w, &h);
+	const int numFbos = 5;
+	for (int i = 0; i < numFbos; i++)
+		fboList.push_back(FboInfo(w, h));
 }
 
 void drawScene(const mat4 &view, const mat4 &projection)
@@ -281,17 +297,35 @@ void display()
 	// draw scene from security camera
 	///////////////////////////////////////////////////////////////////////////
 	// >>> @task 2
-	// ...
+	FboInfo &securityFB = fboList[0];
+	glBindFramebuffer(GL_FRAMEBUFFER, securityFB.framebufferId);
+
+
+
+	glViewport(0, 0, securityFB.width, securityFB.height);
+	glClearColor(0.2, 0.2, 0.8, 1.0);
+
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	drawScene(securityCamViewMatrix, securityCamProjectionMatrix);
+
+
+
 
 	///////////////////////////////////////////////////////////////////////////
 	// draw scene from camera
 	///////////////////////////////////////////////////////////////////////////
-	glBindFramebuffer(GL_FRAMEBUFFER, 0); // to be replaced with another framebuffer when doing post processing
+	//replacement buffer	
+	FboInfo &userCam = fboList[1];
+	glBindFramebuffer(GL_FRAMEBUFFER, userCam.framebufferId);
+
 	glViewport(0, 0, w, h);
 	glClearColor(0.2, 0.2, 0.8, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	drawScene(viewMatrix, projectionMatrix); // using both shaderProgram and backgroundProgram
+	
+	labhelper::Material &screen = landingpadModel->m_materials[8];
+	screen.m_emission_texture.gl_id = securityFB.colorTextureTarget;
 
 	// camera (obj-model)
 	glUseProgram(shaderProgram);
@@ -301,6 +335,15 @@ void display()
 	
 	labhelper::render(cameraModel);
 
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glUseProgram(postFxShader);
+	labhelper::setUniformSlow(postFxShader, "time", currentTime);
+	labhelper::setUniformSlow(postFxShader, "currentEffect", currentEffect);
+	labhelper::setUniformSlow(postFxShader, "filterSize", filterSizes[filterSize - 1]);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, userCam.colorTextureTarget);
+	labhelper::drawFullScreenQuad();
 	///////////////////////////////////////////////////////////////////////////
 	// Post processing pass(es)
 	///////////////////////////////////////////////////////////////////////////
@@ -413,7 +456,7 @@ int main(int argc, char *argv[])
 		display();
 
 		// Render overlay GUI.
-		//gui();
+		gui();
 
 		// Swap front and back buffer. This frame will now been displayed.
 		SDL_GL_SwapWindow(g_window);

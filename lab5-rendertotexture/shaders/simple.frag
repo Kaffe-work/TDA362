@@ -48,21 +48,163 @@ in vec3 viewSpacePosition;
 uniform mat4 viewInverse;
 uniform vec3 viewSpaceLightPosition;
 
+
 ///////////////////////////////////////////////////////////////////////////////
 // Output color
 ///////////////////////////////////////////////////////////////////////////////
 layout(location = 0) out vec4 fragmentColor;
 
+float fresnel_term(vec3 wh, vec3 wi);
+float microfacet_distrib_fun(vec3 wh,vec3 n);
 
-vec3 calculateDirectIllumiunation(vec3 wo, vec3 n)
+vec3 diffuse_term;
+vec3 dielectric_term;
+vec3 metal_term;
+vec3 microfacet_term;
+vec4 irradiance;
+vec2 lookup;
+vec3 wi;
+vec3 wh;
+
+vec3 calculateDirectIllumiunation ( vec3 wo, vec3 n ) {
 {
-	return vec3(material_color);
+	///////////////////////////////////////////////////////////////////////////
+	// Task 1.2 - Calculate the radiance Li from the light, and the direction
+	//            to the light. If the light is backfacing the triangle, 
+	//            return vec3(0); 
+	///////////////////////////////////////////////////////////////////////////
+	//vector from vertex to light with: viewSpaceLightPosition, viewSpacePosition;
+	vec3 lw = viewSpaceLightPosition -viewSpacePosition;
+	//calculate distance from vertex to light with: viewSpaceLightPosition, viewSpacePosition;
+	float d = length ( lw );
+	//calculate light reflected
+	vec3 Li = point_light_intensity_multiplier * point_light_color/( d*d );
+	//direction from the fragment to the light
+	vec3 wi = normalize ( lw );
+
+	if( dot ( n, wi )<=0 ) {
+		return vec3 ( 0.0 );
+	};
+
+	
+	///////////////////////////////////////////////////////////////////////////
+	// Task 1.3 - Calculate the diffuse term and return that as the result
+	///////////////////////////////////////////////////////////////////////////
+	 diffuse_term = material_color * ( 1.0/PI ) * dot ( n, wi ) * Li;
+	///////////////////////////////////////////////////////////////////////////
+	// Task 1.3 - Calculate the diffuse term and return that as the result
+	///////////////////////////////////////////////////////////////////////////
+	// vec3 diffuse_term = ...
+
+	///////////////////////////////////////////////////////////////////////////
+	// Task 2 - Calculate the Torrance Sparrow BRDF and return the light 
+	//          reflected from that instead
+	///////////////////////////////////////////////////////////////////////////
+	vec3 wh = normalize ( wi+wo );
+
+	float whi = dot ( wh, wi );
+	float woh = dot ( wo, wh );
+	float nwh = dot ( n, wh );
+	float nwo = dot ( n, wo );
+	float nwi = dot ( n, wi );
+
+
+	//frensel term
+	float Fwi = fresnel_term(wh, wi);
+
+	//metal shininess
+	float Dwh = microfacet_distrib_fun(wh, n);
+
+	float Gwiwo = min ( 1, min ( 2*nwh*nwo/dot(wo,wh), 2*nwh*nwi/woh ) );
+
+	float brdf = Fwi * Dwh * Gwiwo/( 4*nwo*nwi );
+
+
+	///////////////////////////////////////////////////////////////////////////
+	// Task 3 - Make your shader respect the parameters of our material model.
+	///////////////////////////////////////////////////////////////////////////
+	//return vec3(material_color); kill me for this mistake
+	dielectric_term = brdf * nwi * Li+( 1-Fwi ) * diffuse_term;
+
+	metal_term = brdf * material_color * nwi * Li;
+
+	microfacet_term = material_metalness  * metal_term+ ( 1-material_metalness ) * dielectric_term;
+
+	return material_reflectivity * microfacet_term+( 1-material_reflectivity ) * diffuse_term;
 }
+
+
+}
+
+
+float fresnel_term(vec3 wh, vec3 wi){
+	return material_fresnel + (1 - material_fresnel)* pow((1 - dot(wh,wi)),5);
+}
+
+float microfacet_distrib_fun(vec3 wh,vec3 n){
+	return ((material_shininess + 2)/(2*PI)) * pow(dot(n,wh),material_shininess);
+}
+
+
+
 
 vec3 calculateIndirectIllumination(vec3 wo, vec3 n)
 {
-	return vec3(0.0);
+	///////////////////////////////////////////////////////////////////////////
+	// Task 5 - Lookup the irradiance from the irradiance map and calculate
+	//          the diffuse reflection
+	///////////////////////////////////////////////////////////////////////////
+	vec3 nws = vec3(viewInverse * vec4(n, 0.0f));
+
+	// Calculate the spherical coordinates of the direction
+	float theta = acos ( max ( -1.0f, min ( 1.0f, nws.y ) ) );
+	float phi = atan ( nws.z, nws.x );
+	if( phi < 0.0f ) phi = phi+2.0f * PI;
+	// Use these to lookup the color in the environment map
+	lookup = vec2 ( phi/( 2.0 * PI ), theta/PI );
+
+	irradiance = environment_multiplier * texture ( irradianceMap, lookup );
+	diffuse_term = material_color * ( 1.0/PI ) * irradiance.xyz;
+	//return diffuse_term;
+
+	
+	///////////////////////////////////////////////////////////////////////////
+	// Task 6 - Look up in the reflection map from the perfect specular 
+	//          direction and calculate the dielectric and metal terms. 
+	///////////////////////////////////////////////////////////////////////////
+	vec3 wi = (viewInverse * vec4(reflect(-1.0f*wo, n), 0.0f)).xyz;
+	wi = reflect ( -wo, n );
+	wh = normalize ( wi+ (-wo) );
+
+
+	float wih = dot ( wi, wh );
+	
+	// Calculate the spherical coordinates 
+	theta = acos ( max ( -1.0f, min ( 1.0f, wi.y ) ) );
+	phi = atan ( wi.z, wi.x );
+	if( phi < 0.0f ) phi = phi+2.0f * PI;
+	// Use these to lookup the color in the environment map
+	vec2 lookup = vec2 ( phi/( 2.0 * PI ), theta/PI );
+
+
+	//magic formula 
+	//added a material shininess multiplier, hence it multiplies in the range of 0-25000/1000
+	//why this works is truly beyond me, as it is not what one is supposed to do here. 
+	float roughness = sqrt ( sqrt ( 2/( material_shininess*(material_shininess/1000)) ) );
+	float Fwi = fresnel_term(wh, wh);
+
+	vec3 Li = environment_multiplier * textureLod ( reflectionMap, lookup, roughness * 7.0 ).xyz;
+
+	dielectric_term = Fwi*Li+( 1-Fwi )* diffuse_term;
+	metal_term = Fwi * material_color * Li;
+	microfacet_term = material_metalness  * metal_term+( 1-material_metalness ) * dielectric_term;
+
+	return material_reflectivity * microfacet_term+( 1-material_reflectivity ) * diffuse_term;
+
+	//return vec3(0.0);
 }
+
+
 
 
 void main()
@@ -89,3 +231,6 @@ void main()
 		indirect_illumination_term +
 		emission_term;
 }
+///////////////////////////////////////
+// implmented parts from lab 4       //
+///////////////////////////////////////

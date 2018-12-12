@@ -367,28 +367,28 @@ namespace labhelper {
 	// Error reporting
 	void fatal_error(std::string errorString, std::string title)
 	{
-		if (title.empty()) {
+						if (title.empty()) {
 			title = "GL-Tutorial - Error";
 		}
 		if (errorString.empty()) {
-			errorString = "(unknown error)";
+				errorString = "(unknown error)";
 		}
 		// On Win32 we'll use a message box. On !Win32, just print to stderr and abort()
 #if defined(_WIN32)
 		MessageBox(0, errorString.c_str(), title.c_str(), MB_OK | MB_ICONEXCLAMATION);
 #else
-		fprintf( stderr, "%s : %s\n", title.c_str(), errorString.c_str() );
+				fprintf( stderr, "%s : %s\n", title.c_str(), errorString.c_str() );
 #endif
 		abort();
 	}
 
 	void non_fatal_error(std::string errorString, std::string title)
 	{
-		if (title.empty()) {
-			title = "GL-Tutorial - Error";
-		}
+if (title.empty()) {
+										title = "GL-Tutorial - Error";
+			}
 		if (errorString.empty()) {
-			errorString = "(unknown error)";
+					errorString = "(unknown error)";
 		}
 		// On Win32 we'll use a message box. On !Win32, just print to stderr and abort()
 #if defined(_WIN32)
@@ -400,9 +400,8 @@ namespace labhelper {
 
 	std::string GetShaderInfoLog(GLuint obj) {
 		int logLength = 0;
-		int charsWritten = 0;
-		char *tmpLog;
-		std::string log;
+		int charsWritten = 0;		char *tmpLog;
+			std::string log;
 
 		glGetShaderiv(obj, GL_INFO_LOG_LENGTH, &logLength);
 
