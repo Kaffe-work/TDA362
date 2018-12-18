@@ -86,6 +86,8 @@ float cameraSpeed = 1.0f;
 
 vec3 worldUp(0.0f, 1.0f, 0.0f);
 
+
+
 ///////////////////////////////////////////////////////////////////////////////
 // Models
 ///////////////////////////////////////////////////////////////////////////////
@@ -107,6 +109,7 @@ void initGL()
 	shaderProgram = labhelper::loadShaderProgram("../lab6-shadowmaps/shading.vert", "../lab6-shadowmaps/shading.frag");
 	simpleShaderProgram = labhelper::loadShaderProgram("../lab6-shadowmaps/simple.vert", "../lab6-shadowmaps/simple.frag");
 	particleShaderProgram = labhelper::loadShaderProgram("../project/particle.vert", "../project/particle.frag");
+
 	///////////////////////////////////////////////////////////////////////
 	// Load models and set up model matrices
 	///////////////////////////////////////////////////////////////////////
@@ -119,6 +122,18 @@ void initGL()
 
 	roomModelMatrix = mat4(1.0f);
 	fighterModelMatrix = translate((landingPadYPosition + 15) * worldUp);
+
+	///////////////////////////////////////////////////////////////////////
+	//		Setup Particle System
+	///////////////////////////////////////////////////////////////////////
+	int systemSize = 10000;
+
+	//Note: ship is facing in negative x-direction (issue with model)
+	const vec3 smokeOffset = vec3(19.0f, 1.3f, 0); //How much offset the smoke should have from the origin position of the ship
+	vec3 startingPos = vec3(smokeOffset.x + fighterModelMatrix[3].x, smokeOffset.y + fighterModelMatrix[3].y, smokeOffset.z + fighterModelMatrix[3].z);
+	float spawnTime = 0.04f;
+
+
 
 	///////////////////////////////////////////////////////////////////////
 	// Load environment map
