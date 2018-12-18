@@ -80,6 +80,7 @@ float polygonOffset_units = 1.0f;
 ///////////////////////////////////////////////////////////////////////////////
 vec3 cameraPosition(-70.0f, 50.0f, 70.0f);
 vec3 cameraDirection = normalize(vec3(0.0f) - cameraPosition);
+
 float cameraSpeed = 1.0f;
 
 vec3 worldUp(0.0f, 1.0f, 0.0f);
@@ -93,6 +94,8 @@ labhelper::Model *sphereModel = nullptr;
 
 mat4 roomModelMatrix;
 mat4 fighterModelMatrix;
+vec3 fighterPosition(0.0f, 30.0f, 0.0f);
+vec3 fighterDirection = normalize(vec3(0.0f) - fighterPosition);
 
 void initGL()
 {
@@ -406,21 +409,8 @@ int main(int argc, char *argv[])
 
 		// Swap front and back buffer. This frame will now been displayed.
 		SDL_GL_SwapWindow(g_window);
-
-		// check events (keyboard among other)
-		stopRendering = handleEvents();
-	}
-	// Free Models
-	labhelper::freeModel(fighterModel);
-	labhelper::freeModel(landingpadModel);
-	labhelper::freeModel(sphereModel);
-
-	// Shut down everything. This includes the window and all other subsystems.
-	labhelper::shutDown(g_window);
-	return 0;
-}
-/*
-SDL_Event event;
+		// check new events (keyboard among other)
+			SDL_Event event;
 		while (SDL_PollEvent(&event)) {
 			// Allow ImGui to capture events.
 			ImGui_ImplSdlGL3_ProcessEvent(&event);
@@ -442,23 +432,26 @@ SDL_Event event;
 					mat4 yaw = rotate(rotationSpeed * -delta_x, worldUp);
 					mat4 pitch = rotate(rotationSpeed * -delta_y, normalize(cross(cameraDirection, worldUp)));
 					cameraDirection = vec3(pitch * yaw * vec4(cameraDirection, 0.0f));
-
-
 				}
+				prev_xcoord = event.motion.x;
+				prev_ycoord = event.motion.y;
 			}
+
+			// use camera direction as -z axis and compute the x (cameraRight) and y (cameraUp) base vectors
 		}
 
 		// check keyboard state (which keys are still pressed)
+
 		const uint8_t *state = SDL_GetKeyboardState(nullptr);
 
 		// implement controls based on key states
-		float speed = 0.3f;
+		float speed = 2.0f;
 		static mat4 T(1.0f), R(1.0f);
 		if (state[SDL_SCANCODE_UP]) {
-			T[3] += speed * vec4(0.0f, 0.0f, 1.0f, 0.0f);
+			T[3] += speed * fighterModelMatrix[2];
 		}
 		if (state[SDL_SCANCODE_DOWN]) {
-			T[3] -= speed * vec4(0.0f, 0.0f, 1.0f, 0.0f);
+			T[3] -= speed * fighterModelMatrix[2];
 		}
 		if (state[SDL_SCANCODE_LEFT]) {
 			R[0] -= 0.03f * R[2];
@@ -466,29 +459,44 @@ SDL_Event event;
 		if (state[SDL_SCANCODE_RIGHT]) {
 			R[0] += 0.03f * R[2];
 		}
+		if (state[SDL_SCANCODE_O]) {
+			R[1] -= 0.03f * R[2];
+		}
+		if (state[SDL_SCANCODE_L]) {
+			R[1] += 0.03f * R[2];
+		}
+
 		if (state[SDL_SCANCODE_W]) {
-			cameraPosition -= 0.03f * cameraDirection;
+			cameraPosition += 0.05f * cameraDirection;
 		}
 		if (state[SDL_SCANCODE_S]) {
-			cameraPosition	 += 0.03f * cameraDirection;
+			cameraPosition -= 0.05f * cameraDirection;
 		}
-
 		R[0] = normalize(R[0]);
 		R[2] = vec4(cross(vec3(R[0]), vec3(R[1])), 0.0f);
-		//carModelMatrix = R;	rotation only
+		fighterModelMatrix = T * R;
 
-
-		//carModelMatrix = T;	transplate only
-
-		carModel2Matrix = R * T;
-		//carModelMatrix = T * R;	translate, then rotate equals in non-intended behavour
-
-		//calculations fo rthe spinnyboii car
-		mat4 R2 = rotate((float)(M_PI * currentTime), vec3(0.0f, 1.0f, 0.0f));
-		mat4 T2 = translate(vec3(1.2*currentTime,0.0,1.05*currentTime));	//increases spin by the second
+		//Updating the rotating car
+		mat4 R2 = rotate((float)(-M_PI * currentTime), vec3(0.0f, 1.0f, 0.0f));
+		mat4 T2 = translate(vec3(5.0, 0.0, 0.0));
 		//R2[0] = normalize(R2[0]);
 		//R2[2] = vec4(cross(vec3(R2[0]), vec3(R2[1])),  0.0f);
 
+		//fighterModelMatrix = R2 * T2;
+		
 
-		rotateCarModelMatrix = R2 * T2;
+		// check events (keyboard among other)
+		stopRendering = handleEvents();
+	}
+	// Free Models
+	labhelper::freeModel(fighterModel);
+	labhelper::freeModel(landingpadModel);
+	labhelper::freeModel(sphereModel);
+
+	// Shut down everything. This includes the window and all other subsystems.
+	labhelper::shutDown(g_window);
+	return 0;
+}
+/*
+
 		*/
