@@ -38,6 +38,7 @@ bool showUI = false;
 GLuint shaderProgram; // Shader for rendering the final image
 GLuint simpleShaderProgram; // Shader used to draw the shadow map
 GLuint backgroundProgram;
+GLuint particleShaderProgram; // for particles
 
 ///////////////////////////////////////////////////////////////////////////////
 // Environment
@@ -105,16 +106,19 @@ void initGL()
 	backgroundProgram = labhelper::loadShaderProgram("../lab6-shadowmaps/background.vert", "../lab6-shadowmaps/background.frag");
 	shaderProgram = labhelper::loadShaderProgram("../lab6-shadowmaps/shading.vert", "../lab6-shadowmaps/shading.frag");
 	simpleShaderProgram = labhelper::loadShaderProgram("../lab6-shadowmaps/simple.vert", "../lab6-shadowmaps/simple.frag");
-
+	particleShaderProgram = labhelper::loadShaderProgram("../project/particle.vert", "../project/particle.frag");
 	///////////////////////////////////////////////////////////////////////
 	// Load models and set up model matrices
 	///////////////////////////////////////////////////////////////////////
 	fighterModel = labhelper::loadModelFromOBJ("../scenes/NewShip.obj");
 	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
 	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
+	
+	float landingPadYPosition = 105.0f;
+
 
 	roomModelMatrix = mat4(1.0f);
-	fighterModelMatrix = translate(15.0f * worldUp);
+	fighterModelMatrix = translate((landingPadYPosition + 15) * worldUp);
 
 	///////////////////////////////////////////////////////////////////////
 	// Load environment map
@@ -465,6 +469,7 @@ int main(int argc, char *argv[])
 		if (state[SDL_SCANCODE_L]) {
 			R[1] += 0.03f * R[2];
 		}
+
 
 		if (state[SDL_SCANCODE_W]) {
 			cameraPosition += 0.05f * cameraDirection;
