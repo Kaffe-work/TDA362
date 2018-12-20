@@ -1,5 +1,4 @@
-
-#include "heightfield.h"
+#include "heightfield.h";
 
 #include <iostream>
 #include <stdint.h>
@@ -30,6 +29,7 @@ void HeightField::loadHeightField(const std::string &heigtFieldPath)
 	stbi_set_flip_vertically_on_load(true);
 	float * data = stbi_loadf(heigtFieldPath.c_str(), &width, &height, &components, 1);
 	if (data == nullptr) {
+		0 / 3;
 		std::cout << "Failed to load image: " << heigtFieldPath << ".\n";
 		return;
 	}
@@ -78,8 +78,84 @@ void HeightField::loadDiffuseTexture(const std::string &diffusePath)
 
 void HeightField::generateMesh(int tesselation)
 {
+	//length of the mesh divided by the tesselation
+	float triangleSize = 2.0 / tesselation;
+	//each quad has 6 indices, nr of quads == tesselation ^ 2
+	m_numIndices = 6 * tesselation * tesselation;
+
 	// generate a mesh in range -1 to 1 in x and z
 	// (y is 0 but will be altered in height field vertex shader)
+	std::vector<float> positions;
+	std::vector<float> texCoords;
+	std::vector<unsigned int> indices;
+	for (float x = -1.0f; x < 1; x += triangleSize)
+		for (float z = -1.0f; z < 1; z += triangleSize)
+		{
+			positions.push_back(x);
+			positions.push_back(0.3);
+			positions.push_back(z);
+
+			texCoords.push_back((x + 1) / 2);
+			texCoords.push_back((z + 1) / 2);
+
+			positions.push_back(x);
+			positions.push_back(7);
+			positions.push_back(z + triangleSize);
+
+			texCoords.push_back((x + 1) / 2);
+			texCoords.push_back((z + triangleSize + 1) / 2);
+
+			positions.push_back(x + triangleSize);
+			positions.push_back(0.5);
+			positions.push_back(z);
+
+			texCoords.push_back((x + triangleSize + 1) / 2);
+			texCoords.push_back((z + 1) / 2);
+
+			positions.push_back(x + triangleSize);
+			positions.push_back(3);
+			positions.push_back(z + triangleSize);
+
+			texCoords.push_back((x + triangleSize + 1) / 2);
+			texCoords.push_back((z + triangleSize + 1) / 2);
+
+			positions.push_back(x + triangleSize);
+			positions.push_back(0);
+			positions.push_back(z);
+
+			texCoords.push_back((x + triangleSize + 1) / 2);
+			texCoords.push_back((z + 1) / 2);
+
+			positions.push_back(x);
+			positions.push_back(0);
+			positions.push_back(z + triangleSize);
+
+			texCoords.push_back((x + 1) / 2);
+			texCoords.push_back((z + triangleSize + 1) / 2);
+		}
+
+
+
+	glGenVertexArrays(1, &m_vao);
+
+	glBindVertexArray(m_vao);
+
+	glGenBuffers(1, &m_positionBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, m_positionBuffer);
+	glBufferData(GL_ARRAY_BUFFER, positions.size() * sizeof(float), positions.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
+
+	glGenBuffers(1, &m_uvBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, m_uvBuffer);
+	glBufferData(GL_ARRAY_BUFFER, texCoords.size() * sizeof(float), texCoords.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(2, 2, GL_FLOAT, false, 0, 0);
+
+	
+
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
 }
 
 void HeightField::submitTriangles(void)
@@ -89,4 +165,16 @@ void HeightField::submitTriangles(void)
 		return;
 	}
 
+	glBindVertexArray(m_vao);
+	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	glDisable(GL_CULL_FACE);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, m_texid_hf);
+	glActiveTexture(GL_TEXTURE11);
+	glBindTexture(GL_TEXTURE_2D, m_texid_diffuse);
+	//glDrawElements(GL_TRIANGLES, m_numIndices, GL_UNSIGNED_INT, 0);
+	glDrawArrays(GL_TRIANGLES, 0, m_numIndices);
+	//glEnable(GL_CULL_FACE);
+	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	glBindVertexArray(0);
 }

@@ -21,6 +21,7 @@ using namespace glm;
 #include <Model.h>
 #include "hdr.h"
 #include "fbo.h"
+#include "heightfield.h"
 
 using std::min;
 using std::max;
@@ -30,7 +31,12 @@ using std::max;
 ///////////////////////////////////////////////////////////////////////////////
 SDL_Window* g_window = nullptr;
 float currentTime = 0.0f;
-bool showUI = false;
+float previousTime = 0.0f;
+float deltaTime = 0.0f;
+bool showUI = true;
+
+int windowWidth, windowHeight;
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // Shader programs
@@ -38,7 +44,7 @@ bool showUI = false;
 GLuint shaderProgram; // Shader for rendering the final image
 GLuint simpleShaderProgram; // Shader used to draw the shadow map
 GLuint backgroundProgram;
-GLuint particleShaderProgram; // for particles
+GLuint heightFieldProgram;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Environment
@@ -67,6 +73,7 @@ enum ClampMode {
 };
 
 FboInfo shadowMapFB;
+HeightField terrain;
 int shadowMapResolution = 1024;
 int shadowMapClampMode = ClampMode::Edge;
 bool usePolygonOffest = true;
@@ -82,7 +89,7 @@ float polygonOffset_units = 1.0f;
 vec3 cameraPosition(-70.0f, 50.0f, 70.0f);
 vec3 cameraDirection = normalize(vec3(0.0f) - cameraPosition);
 
-float cameraSpeed = 1.0f;
+float cameraSpeed =30.0f;
 
 vec3 worldUp(0.0f, 1.0f, 0.0f);
 
@@ -99,6 +106,20 @@ mat4 roomModelMatrix;
 mat4 fighterModelMatrix;
 vec3 fighterPosition(0.0f, 30.0f, 0.0f);
 vec3 fighterDirection = normalize(vec3(0.0f) - fighterPosition);
+mat4 heightFieldModelMatrix;
+
+
+void loadShaders(bool is_reload)
+{
+	GLuint shader = labhelper::loadShaderProgram("../project/simple.vert", "../project/simple.frag", is_reload);
+	if (shader != 0) simpleShaderProgram = shader;
+	shader = labhelper::loadShaderProgram("../project/background.vert", "../project/background.frag", is_reload);
+	if (shader != 0) backgroundProgram = shader;
+	shader = labhelper::loadShaderProgram("../project/shading.vert", "../project/shading.frag", is_reload);
+	if (shader != 0) shaderProgram = shader;
+	shader = labhelper::loadShaderProgram("../project/heightfield.vert", "../project/heightfield.frag", is_reload);
+	if (shader != 0) heightFieldProgram = shader;
+}
 
 void initGL()
 {
@@ -108,7 +129,8 @@ void initGL()
 	backgroundProgram = labhelper::loadShaderProgram("../lab6-shadowmaps/background.vert", "../lab6-shadowmaps/background.frag");
 	shaderProgram = labhelper::loadShaderProgram("../lab6-shadowmaps/shading.vert", "../lab6-shadowmaps/shading.frag");
 	simpleShaderProgram = labhelper::loadShaderProgram("../lab6-shadowmaps/simple.vert", "../lab6-shadowmaps/simple.frag");
-	particleShaderProgram = labhelper::loadShaderProgram("../project/particle.vert", "../project/particle.frag");
+
+	heightFieldProgram = labhelper::loadShaderProgram("../project/heightfield.vert", "../project/heightfield.frag");
 
 	///////////////////////////////////////////////////////////////////////
 	// Load models and set up model matrices
@@ -117,23 +139,13 @@ void initGL()
 	landingpadModel = labhelper::loadModelFromOBJ("../scenes/landingpad.obj");
 	sphereModel = labhelper::loadModelFromOBJ("../scenes/sphere.obj");
 	
-	float landingPadYPosition = 105.0f;
+	float landingPadYPosition = 155.0f;
 
 
 	roomModelMatrix = mat4(1.0f);
 	fighterModelMatrix = translate((landingPadYPosition + 15) * worldUp);
 
-	///////////////////////////////////////////////////////////////////////
-	//		Setup Particle System
-	///////////////////////////////////////////////////////////////////////
-	int systemSize = 10000;
-
-	//Note: ship is facing in negative x-direction (issue with model)
-	const vec3 smokeOffset = vec3(19.0f, 1.3f, 0); //How much offset the smoke should have from the origin position of the ship
-	vec3 startingPos = vec3(smokeOffset.x + fighterModelMatrix[3].x, smokeOffset.y + fighterModelMatrix[3].y, smokeOffset.z + fighterModelMatrix[3].z);
-	float spawnTime = 0.04f;
-
-
+	heightFieldModelMatrix = scale(vec3(1000.0f, 125.0f, 1000.0f));
 
 	///////////////////////////////////////////////////////////////////////
 	// Load environment map
@@ -161,7 +173,10 @@ void initGL()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
 
 
+	terrain.loadHeightField("../scenes/nlsFinland/L3123F.png");
+	terrain.loadDiffuseTexture("../scenes/nlsFinland/L3123F_downscaled.jpg");
 
+	terrain.generateMesh(1024);
 }
 
 void debugDrawLight(const glm::mat4 &viewMatrix, const glm::mat4 &projectionMatrix, const glm::vec3 &worldSpaceLightPos)
@@ -202,6 +217,7 @@ void drawScene(GLuint currentShaderProgram, const mat4 &viewMatrix, const mat4 &
 	labhelper::setUniformSlow(currentShaderProgram, "spotInnerAngle", std::cos(radians(innerSpotlightAngle)));
 
 
+
 	// Environment
 	labhelper::setUniformSlow(currentShaderProgram, "environment_multiplier", environment_multiplier);
 
@@ -225,6 +241,51 @@ void drawScene(GLuint currentShaderProgram, const mat4 &viewMatrix, const mat4 &
 
 
 }
+
+GLfloat terrain_reflectivity = 1.0f;
+GLfloat terrain_metalness = 1.0f;
+GLfloat terrain_fresnel = 1.0f;
+GLfloat terrain_shininess = 1.0f;
+GLfloat terrain_emission = 1.0f;
+GLfloat displaceNormal = 0;
+
+void drawTerrain(const mat4 &viewMatrix, const mat4 &projectionMatrix, const mat4 &lightViewMatrix, const mat4 &lightProjectionMatrix)
+{
+	glUseProgram(heightFieldProgram);
+	//shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix
+	vec4 viewSpaceLightPosition = viewMatrix * vec4(lightPosition, 1.0f);
+	labhelper::setUniformSlow(heightFieldProgram, "point_light_color", point_light_color);
+	labhelper::setUniformSlow(heightFieldProgram, "point_light_intensity_multiplier", point_light_intensity_multiplier);
+	labhelper::setUniformSlow(heightFieldProgram, "viewSpaceLightPosition", vec3(viewSpaceLightPosition));
+	labhelper::setUniformSlow(heightFieldProgram, "viewSpaceLightDir", normalize(vec3(viewMatrix * vec4(-lightPosition, 0.0f))));
+	labhelper::setUniformSlow(heightFieldProgram, "spotOuterAngle", std::cos(radians(outerSpotlightAngle)));
+	labhelper::setUniformSlow(heightFieldProgram, "spotInnerAngle", std::cos(radians(innerSpotlightAngle)));
+
+	//shadowMap
+	mat4 lightMatrix = translate(mat4(1.0f), vec3(0.5f, 0.5f, 0.5f)) * scale(mat4(1.0f), vec3(0.5f, 0.5f, 0.5f)) * lightProjectionMatrix * lightViewMatrix * inverse(viewMatrix);
+	labhelper::setUniformSlow(heightFieldProgram, "lightMatrix", lightMatrix);
+
+	// Environment
+	labhelper::setUniformSlow(heightFieldProgram, "environment_multiplier", environment_multiplier);
+
+	// camera
+	labhelper::setUniformSlow(heightFieldProgram, "viewInverse", inverse(viewMatrix));
+
+	labhelper::setUniformSlow(heightFieldProgram, "modelViewProjectionMatrix", projectionMatrix * viewMatrix * heightFieldModelMatrix);
+	labhelper::setUniformSlow(heightFieldProgram, "modelViewMatrix", viewMatrix * heightFieldModelMatrix);
+	labhelper::setUniformSlow(heightFieldProgram, "normalMatrix", inverse(transpose(viewMatrix * heightFieldModelMatrix)));
+
+	labhelper::setUniformSlow(heightFieldProgram, "material_reflectivity", terrain_reflectivity);
+	labhelper::setUniformSlow(heightFieldProgram, "material_metalness", terrain_metalness);
+	labhelper::setUniformSlow(heightFieldProgram, "material_fresnel", terrain_fresnel);
+	labhelper::setUniformSlow(heightFieldProgram, "material_shininess", terrain_shininess);
+	labhelper::setUniformSlow(heightFieldProgram, "material_emission", terrain_emission);
+	labhelper::setUniformSlow(heightFieldProgram, "displaceNormal", displaceNormal);
+
+	terrain.submitTriangles();
+	glUseProgram(0);
+}
+
 
 
 
@@ -258,25 +319,20 @@ void display(void)
 	///////////////////////////////////////////////////////////////////////////
 	// Set up shadow map parameters
 	///////////////////////////////////////////////////////////////////////////
-	// >>> @task 1
-	if (shadowMapFB.width != shadowMapResolution || shadowMapFB.height != shadowMapResolution) {
+	if (shadowMapFB.width != shadowMapResolution || shadowMapFB.height != shadowMapResolution)
+	{
 		shadowMapFB.resize(shadowMapResolution, shadowMapResolution);
 	}
 
-	///////////////////////////////////////////////////////////////////////////
-	// Draw Shadow Map
-	///////////////////////////////////////////////////////////////////////////
-	glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFB.framebufferId);
-	glViewport(0, 0, shadowMapFB.width, shadowMapFB.height);
-
-
-	if (shadowMapClampMode == ClampMode::Edge) {
+	if (shadowMapClampMode == ClampMode::Edge)
+	{
 		glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);	
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	}
 
-	if (shadowMapClampMode == ClampMode::Border) {
+	if (shadowMapClampMode == ClampMode::Border)
+	{
 		glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
@@ -284,28 +340,32 @@ void display(void)
 		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &zeros.x);
 	}
 
+	///////////////////////////////////////////////////////////////////////////
+	// Draw Shadow Map
+	///////////////////////////////////////////////////////////////////////////
+
+	glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFB.framebufferId);
+	glViewport(0, 0, shadowMapFB.width, shadowMapFB.height);
 	glClearColor(0.2, 0.2, 0.8, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-
-	glActiveTexture(GL_TEXTURE10);
-	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
-
-	//3.1 ctrlc+v
-	if (usePolygonOffest) {
+	if (usePolygonOffest)
+	{
 		glEnable(GL_POLYGON_OFFSET_FILL);
 		glPolygonOffset(polygonOffset_factor, polygonOffset_units);
 	}
 
 	drawScene(simpleShaderProgram, lightViewMatrix, lightProjMatrix, lightViewMatrix, lightProjMatrix);
 
-	labhelper::Material &screen = landingpadModel->m_materials[8];
-	screen.m_emission_texture.gl_id = shadowMapFB.colorTextureTarget;
-
-	//3.1 ctrlc+v
-	if (usePolygonOffest) {
+	if (usePolygonOffest)
+	{
 		glDisable(GL_POLYGON_OFFSET_FILL);
 	}
+
+	labhelper::Material &screen = landingpadModel->m_materials[8];
+
+	glActiveTexture(GL_TEXTURE10);
+	glBindTexture(GL_TEXTURE_2D, shadowMapFB.depthBuffer);
 
 	///////////////////////////////////////////////////////////////////////////
 	// Draw from camera
@@ -316,18 +376,18 @@ void display(void)
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	drawBackground(viewMatrix, projMatrix);
+	drawTerrain(viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
 	drawScene(shaderProgram, viewMatrix, projMatrix, lightViewMatrix, lightProjMatrix);
 	debugDrawLight(viewMatrix, projMatrix, vec3(lightPosition));
 
 
-	CHECK_GL_ERROR();
 }
 
 bool handleEvents(void)
 {
 	// check events (keyboard among other)
 	SDL_Event event;
-	bool quitEvent = false;
+	bool quitEvent = !true;
 	while (SDL_PollEvent(&event)) {
 		if (event.type == SDL_QUIT || (event.type == SDL_KEYUP && event.key.keysym.sym == SDLK_ESCAPE)) {
 			quitEvent = true;
@@ -406,7 +466,7 @@ void gui()
 
 int main(int argc, char *argv[])
 {
-	g_window = labhelper::init_window_SDL("OpenGL Lab 6");
+	g_window = labhelper::init_window_SDL("Project");
 
 	initGL();
 
@@ -464,7 +524,7 @@ int main(int argc, char *argv[])
 		const uint8_t *state = SDL_GetKeyboardState(nullptr);
 
 		// implement controls based on key states
-		float speed = 2.0f;
+		float speed = 10.0f;
 		static mat4 T(1.0f), R(1.0f);
 		if (state[SDL_SCANCODE_UP]) {
 			T[3] += speed * fighterModelMatrix[2];
@@ -473,24 +533,24 @@ int main(int argc, char *argv[])
 			T[3] -= speed * fighterModelMatrix[2];
 		}
 		if (state[SDL_SCANCODE_LEFT]) {
-			R[0] -= 0.03f * R[2];
+			R[0] -= 0.09f * R[2];
 		}
 		if (state[SDL_SCANCODE_RIGHT]) {
-			R[0] += 0.03f * R[2];
+			R[0] += 0.09f * R[2];
 		}
 		if (state[SDL_SCANCODE_O]) {
-			R[1] -= 0.03f * R[2];
+			R[1] -= 0.09f * R[2];
 		}
 		if (state[SDL_SCANCODE_L]) {
-			R[1] += 0.03f * R[2];
+			R[1] += 0.09f * R[2];
 		}
 
 
 		if (state[SDL_SCANCODE_W]) {
-			cameraPosition += 0.05f * cameraDirection;
+			cameraPosition += 0.12f * cameraDirection;
 		}
 		if (state[SDL_SCANCODE_S]) {
-			cameraPosition -= 0.05f * cameraDirection;
+			cameraPosition -= 0.12f * cameraDirection;
 		}
 		R[0] = normalize(R[0]);
 		R[2] = vec4(cross(vec3(R[0]), vec3(R[1])), 0.0f);
